@@ -553,13 +553,25 @@ PrefabInstance:
       propertyPath: m_Name
       value: Kitty_CameraFollowTarget
       objectReference: {fileID: 0}
+    - target: {fileID: 2110888991958408717, guid: 516e681ed61f1624cabeb149ebeddd39, type: 3}
+      propertyPath: m_Height
+      value: 1.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 2110888991958408717, guid: 516e681ed61f1624cabeb149ebeddd39, type: 3}
+      propertyPath: m_Radius
+      value: 0.32
+      objectReference: {fileID: 0}
+    - target: {fileID: 2110888991958408717, guid: 516e681ed61f1624cabeb149ebeddd39, type: 3}
+      propertyPath: m_Center.y
+      value: 0.52
+      objectReference: {fileID: 0}
     - target: {fileID: 2735546869792278997, guid: 516e681ed61f1624cabeb149ebeddd39, type: 3}
       propertyPath: m_LocalPosition.x
       value: 3.164
       objectReference: {fileID: 0}
     - target: {fileID: 2735546869792278997, guid: 516e681ed61f1624cabeb149ebeddd39, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.237
+      value: 0.025
       objectReference: {fileID: 0}
     - target: {fileID: 2735546869792278997, guid: 516e681ed61f1624cabeb149ebeddd39, type: 3}
       propertyPath: m_LocalPosition.z
@@ -597,13 +609,14 @@ PrefabInstance:
       propertyPath: m_Name
       value: Character_Kitty
       objectReference: {fileID: 0}
+    - target: {fileID: 4922273247205769993, guid: 516e681ed61f1624cabeb149ebeddd39, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 4922273247205769993, guid: 516e681ed61f1624cabeb149ebeddd39, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1547013075}
     - targetCorrespondingSourceObject: {fileID: 4922273247205769993, guid: 516e681ed61f1624cabeb149ebeddd39, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1547013074}
@@ -658,9 +671,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f85eecf33a9944e459ea5fcacf02209d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::KittyCharacterController
-  MoveInput: {fileID: -1680190386980627800, guid: 6bc3fbc9c4da64a469990c67a32bbeab, type: 3}
-  JumpInput: {fileID: -2099379676528639254, guid: 6bc3fbc9c4da64a469990c67a32bbeab, type: 3}
+  MoveAction: {fileID: -1680190386980627800, guid: 6bc3fbc9c4da64a469990c67a32bbeab, type: 3}
+  JumpAction: {fileID: -2099379676528639254, guid: 6bc3fbc9c4da64a469990c67a32bbeab, type: 3}
   PlayerCamera: {fileID: 527717021}
+  MaxGroundSpeed: 5
+  MaxAirSpeed: 3
+  GroundAcceleration: 2.5
+  AirAcceleration: 2
+  JumpStrength: 7
+  RotationRate: 5
+  Gravity: {x: 0, y: -15, z: 0}
 --- !u!114 &1547013074
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -674,9 +694,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp-firstpass::KinematicCharacterController.KinematicCharacterMotor
   Capsule: {fileID: 1547013075}
-  CapsuleRadius: 0.5
-  CapsuleHeight: 2
-  CapsuleYOffset: 1
+  CapsuleRadius: 0.32
+  CapsuleHeight: 1.05
+  CapsuleYOffset: 0.52
   CapsulePhysicsMaterial: {fileID: 0}
   GroundDetectionExtraDistance: 0
   MaxStableSlopeAngle: 60
@@ -689,7 +709,7 @@ MonoBehaviour:
   AllowSteppingWithoutStableGrounding: 0
   MinRequiredStepDepth: 0.1
   LedgeAndDenivelationHandling: 1
-  MaxStableDistanceFromLedge: 0.5
+  MaxStableDistanceFromLedge: 0.32
   MaxVelocityForLedgeSnap: 0
   MaxStableDenivelationAngle: 180
   InteractiveRigidbodyHandling: 1
@@ -703,29 +723,11 @@ MonoBehaviour:
   CheckMovementInitialOverlaps: 1
   KillVelocityWhenExceedMaxMovementIterations: 1
   KillRemainingMovementWhenExceedMaxMovementIterations: 1
---- !u!136 &1547013075
+--- !u!136 &1547013075 stripped
 CapsuleCollider:
-  m_ObjectHideFlags: 8
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
+  m_CorrespondingSourceObject: {fileID: 2110888991958408717, guid: 516e681ed61f1624cabeb149ebeddd39, type: 3}
+  m_PrefabInstance: {fileID: 1547013070}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1547013071}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 2
-  m_Radius: 0.5
-  m_Height: 2
-  m_Direction: 1
-  m_Center: {x: 0, y: 1, z: 0}
 --- !u!1 &1993398765
 GameObject:
   m_ObjectHideFlags: 0
@@ -20339,7 +20341,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1568892643889490899, guid: e67a6d8660905894cb7811488cffcdf6, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -2.049
+      value: -2.2610002
       objectReference: {fileID: 0}
     - target: {fileID: 1568892643889490899, guid: e67a6d8660905894cb7811488cffcdf6, type: 3}
       propertyPath: m_LocalPosition.z
@@ -20451,7 +20453,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7373755467491895740, guid: e67a6d8660905894cb7811488cffcdf6, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -2.049
+      value: -2.2610002
       objectReference: {fileID: 0}
     - target: {fileID: 7373755467491895740, guid: e67a6d8660905894cb7811488cffcdf6, type: 3}
       propertyPath: m_LocalPosition.z
