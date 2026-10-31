@@ -23,6 +23,10 @@ public class MyCharacterController : MonoBehaviour, ICharacterController
 
     public Vector3 Gravity = new Vector3(0, -10, 0);
 
+    // Time after leaving the ground during which a jump can still be initiated
+    public float coyoteTime = 0.2f;
+    
+
     private Vector3 _moveInput;
     private Vector3 _lookInput;
     private bool _jumpPressed;
@@ -63,7 +67,7 @@ public class MyCharacterController : MonoBehaviour, ICharacterController
     {
         Vector3 cameraPlanarDirection = Vector3.ProjectOnPlane(cameraRotation * Vector3.forward, _kinematicMotor.CharacterUp).normalized;
 
-        if (cameraPlanarDirection.sqrMagnitude > 0)
+        if (cameraPlanarDirection.sqrMagnitude == 0)
         {
             cameraPlanarDirection = Vector3.ProjectOnPlane(cameraRotation * Vector3.up, _kinematicMotor.CharacterUp).normalized;
         }
