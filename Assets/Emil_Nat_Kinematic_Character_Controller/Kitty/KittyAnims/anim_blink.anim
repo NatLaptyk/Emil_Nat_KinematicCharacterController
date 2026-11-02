@@ -54,6 +54,23 @@ AnimationClip:
     classID: 137
     script: {fileID: 0}
     flags: 2
+  - serializedVersion: 2
+    curve:
+    - time: 0
+      value: {fileID: 2100000, guid: a0f9e59b7b0df074ea53e872af3219d0, type: 2}
+    - time: 0.1
+      value: {fileID: 2100000, guid: 21fb92ccf3d281948838530c32335b81, type: 2}
+    - time: 0.21666667
+      value: {fileID: 2100000, guid: 0e3f087c9fc591f44bcb625e5be26bb2, type: 2}
+    - time: 0.31666666
+      value: {fileID: 2100000, guid: 21fb92ccf3d281948838530c32335b81, type: 2}
+    - time: 0.41666666
+      value: {fileID: 2100000, guid: a0f9e59b7b0df074ea53e872af3219d0, type: 2}
+    attribute: 'm_Materials.Array.data[1]'
+    path: Kitty_Model
+    classID: 137
+    script: {fileID: 0}
+    flags: 2
   m_SampleRate: 60
   m_WrapMode: 0
   m_Bounds:
@@ -79,6 +96,15 @@ AnimationClip:
       isPPtrCurve: 1
       isIntCurve: 0
       isSerializeReferenceCurve: 0
+    - serializedVersion: 2
+      path: 1645709396
+      attribute: 1
+      script: {fileID: 0}
+      typeID: 137
+      customType: 21
+      isPPtrCurve: 1
+      isIntCurve: 0
+      isSerializeReferenceCurve: 0
     pptrCurveMapping:
     - {fileID: 2100000, guid: 788157f36772aa84184b5b92e2faf562, type: 2}
     - {fileID: 2100000, guid: 788157f36772aa84184b5b92e2faf562, type: 2}
@@ -86,6 +112,11 @@ AnimationClip:
     - {fileID: 2100000, guid: 788157f36772aa84184b5b92e2faf562, type: 2}
     - {fileID: 2100000, guid: 788157f36772aa84184b5b92e2faf562, type: 2}
     - {fileID: 2100000, guid: 788157f36772aa84184b5b92e2faf562, type: 2}
+    - {fileID: 2100000, guid: a0f9e59b7b0df074ea53e872af3219d0, type: 2}
+    - {fileID: 2100000, guid: 21fb92ccf3d281948838530c32335b81, type: 2}
+    - {fileID: 2100000, guid: 0e3f087c9fc591f44bcb625e5be26bb2, type: 2}
+    - {fileID: 2100000, guid: 21fb92ccf3d281948838530c32335b81, type: 2}
+    - {fileID: 2100000, guid: a0f9e59b7b0df074ea53e872af3219d0, type: 2}
     - {fileID: 2100000, guid: a0f9e59b7b0df074ea53e872af3219d0, type: 2}
     - {fileID: 2100000, guid: 21fb92ccf3d281948838530c32335b81, type: 2}
     - {fileID: 2100000, guid: 0e3f087c9fc591f44bcb625e5be26bb2, type: 2}
