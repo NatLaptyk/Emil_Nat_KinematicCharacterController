@@ -20838,11 +20838,11 @@ PrefabInstance:
       objectReference: {fileID: 210538586}
     - target: {fileID: 6323485240399980711, guid: e67a6d8660905894cb7811488cffcdf6, type: 3}
       propertyPath: m_ControllerManager.Controllers.Array.data[0].Input.Gain
-      value: 4
+      value: 11
       objectReference: {fileID: 0}
     - target: {fileID: 6323485240399980711, guid: e67a6d8660905894cb7811488cffcdf6, type: 3}
       propertyPath: m_ControllerManager.Controllers.Array.data[1].Input.Gain
-      value: -4
+      value: -11
       objectReference: {fileID: 0}
     - target: {fileID: 7094607015328368303, guid: e67a6d8660905894cb7811488cffcdf6, type: 3}
       propertyPath: m_TagString
