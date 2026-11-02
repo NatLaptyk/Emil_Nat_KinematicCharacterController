@@ -5,7 +5,7 @@ using KinematicCharacterController;
 using System;
 
 [RequireComponent(typeof(KinematicCharacterMotor))]
-public class MyCharacterController : MonoBehaviour, ICharacterController
+public class KittyCharacterController : MonoBehaviour, ICharacterController
 {
     public InputActionReference MoveAction;
     public InputActionReference JumpAction;
