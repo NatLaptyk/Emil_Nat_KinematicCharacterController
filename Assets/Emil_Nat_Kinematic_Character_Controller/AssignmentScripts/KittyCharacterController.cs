@@ -76,6 +76,9 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     // Top speed, in metres per second, on the ground while the run button is held
     public float MaxRunSpeed = 9f;
 
+    //SDFBJHDSFKJSHDFLHSDLFKJHSLDKJFHLSKJDHFLJSHDFLKJHSDLFKJHSLDJFHLSKJDHFLKSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJFD
+    public float MaxRunAirSpeed = 9f;
+
     // Speed along the ladder, in metres per second, at full stick
     public float ClimbSpeed = 3f;
 
@@ -87,7 +90,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     // Calling the animator
     [Header("Animation")]
-    [SerializeField] private Animator animator;
+    [SerializeField] private Animator _animator;
 
     #endregion
 
@@ -184,7 +187,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
         }
 
         _kinematicMotor.CharacterController = this;
-        animator = GetComponent<Animator>();
+        //_animator = GetComponent<Animator>();
     }
 
     #endregion
@@ -504,12 +507,27 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
     public void AfterCharacterUpdate(float deltaTime)
     {
-        if (_movementMode != MovementMode.Climbing)
+        if (_movementMode == MovementMode.Climbing)
         {
-            return;
+            UpdateClimbing(deltaTime);
         }
 
-        UpdateClimbing(deltaTime);
+        UpdateAnimation();
+    }
+
+    private void UpdateAnimation()
+    {
+        Vector3 characterVelocity = _kinematicMotor.Velocity;
+        Vector3 inputVelocity = _moveInput;
+
+        _animator.SetBool("isGrounded", _kinematicMotor.GroundingStatus.IsStableOnGround);
+
+        _animator.SetBool("isRun", _moveInput.sqrMagnitude > 0);
+
+        if (!_kinematicMotor.GroundingStatus.IsStableOnGround)
+        {
+            _animator.SetBool("isJumping", _kinematicMotor.Velocity.y > 0);
+        }
     }
 
     #endregion
@@ -592,7 +610,9 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     {
         if (_moveInput.sqrMagnitude > 0)
         {
-            Vector3 targetVelocity = _moveInput * MaxAirSpeed;
+            float maxSpeed = _runHeld ? MaxRunAirSpeed : MaxAirSpeed;
+
+            Vector3 targetVelocity = _moveInput * maxSpeed;
 
             // Keep only the horizontal part of the correction so air control never fights gravity
             Vector3 velocityDiff = Vector3.ProjectOnPlane(targetVelocity - currentVelocity, Gravity);
@@ -710,6 +730,10 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     /// <param name="hitStabilityReport">The motor's verdict on whether the character can stand there.</param>
     public void OnGroundHit(Collider hitCollider, Vector3 hitNormal, Vector3 hitPoint, ref HitStabilityReport hitStabilityReport)
     {
+        if (hitStabilityReport.IsStable)
+        {
+            _animator.SetTrigger("isLanding");
+        }
     }
 
     /// <summary>

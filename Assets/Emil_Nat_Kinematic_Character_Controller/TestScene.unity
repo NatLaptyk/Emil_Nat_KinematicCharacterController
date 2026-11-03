@@ -1051,9 +1051,9 @@ MonoBehaviour:
   MoveAction: {fileID: -1680190386980627800, guid: 6bc3fbc9c4da64a469990c67a32bbeab, type: 3}
   JumpAction: {fileID: -2099379676528639254, guid: 6bc3fbc9c4da64a469990c67a32bbeab, type: 3}
   PlayerCamera: {fileID: 527717021}
-  MaxGroundSpeed: 5
+  MaxGroundSpeed: 2.5
   MaxAirSpeed: 3
-  GroundAcceleration: 2.5
+  GroundAcceleration: 5
   AirAcceleration: 2
   JumpStrength: 7
   RotationRate: 5
@@ -1067,7 +1067,7 @@ MonoBehaviour:
   LadderLayers:
     serializedVersion: 2
     m_Bits: 8
-  animator: {fileID: 512524888}
+  _animator: {fileID: 512524888}
 --- !u!4 &1600790427 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 2067988488256933446, guid: 516e681ed61f1624cabeb149ebeddd39, type: 3}
