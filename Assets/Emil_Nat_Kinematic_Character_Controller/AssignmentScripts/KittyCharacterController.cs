@@ -1,7 +1,7 @@
+using KinematicCharacterController;
+using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using Unity.Cinemachine;
-using KinematicCharacterController;
 
 /// <summary>
 /// Third-person character controller built on top of the Kinematic Character Controller (KCC) asset.
@@ -14,7 +14,7 @@ using KinematicCharacterController;
 [RequireComponent(typeof(KinematicCharacterMotor))]
 public class KittyCharacterController : MonoBehaviour, ICharacterController
 {
-        #region Types
+    #region Types
 
     // Which set of movement rules is in charge
     private enum MovementMode
@@ -67,9 +67,9 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     // Time, in seconds, after walking off a ledge during which a jump is still accepted
     public float CoyoteTime = 0.2f;
-        // Input System action for running; held = run, released = walk
+    // Input System action for running; held = run, released = walk
     public InputActionReference RunAction;
-    
+
     // Input System action that grabs a ladder in reach, or lets go while climbing
     public InputActionReference ClimbAction;
 
@@ -84,6 +84,10 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     // Physics layer(s) the ladder trigger colliders live on
     public LayerMask LadderLayers;
+
+    // Calling the animator
+    [Header("Animation")]
+    [SerializeField] private Animator animator;
 
     #endregion
 
@@ -103,7 +107,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     // The KCC motor on this GameObject; it owns the capsule, the collisions and the ground detection
     private KinematicCharacterMotor _kinematicMotor;
-    
+
     // Which movement rules are in charge right now
     private MovementMode _movementMode = MovementMode.Normal;
 
@@ -180,6 +184,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
         }
 
         _kinematicMotor.CharacterController = this;
+        animator = GetComponent<Animator>();
     }
 
     #endregion
@@ -209,7 +214,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     {
         // Raw input in the stick's own 2D space
         Vector2 moveActionInput = MoveAction.action.ReadValue<Vector2>();
-        
+
         // Raw forward/back for the ladder, before the camera rotation: push forward to climb up
         _climbInput = moveActionInput.y;
 
@@ -303,7 +308,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
         return Quaternion.LookRotation(cameraPlanarDirection, _kinematicMotor.CharacterUp);
     }
-    
+
     /// <summary>
     /// Latches button presses that must be handled exactly once. The flag stays true until a motor update consumes it,
     /// so a press is never lost between frames and never handled twice.
@@ -368,7 +373,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     #endregion
 
-        #region Climbing
+    #region Climbing
 
     /// <summary>
     /// Switches to climbing. Collision and ground solving are turned off so the motor moves the cat exactly where the
@@ -539,12 +544,12 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
         ApplyJumping(ref currentVelocity);
     }
-        /// <summary>
-        /// Updates the character's velocity while climbing.
-        /// </summary>
-        /// <param name="currentVelocity">The character's velocity to modify.</param>
-        /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
-        private void ClimbingVelocity(ref Vector3 currentVelocity, float deltaTime)
+    /// <summary>
+    /// Updates the character's velocity while climbing.
+    /// </summary>
+    /// <param name="currentVelocity">The character's velocity to modify.</param>
+    /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
+    private void ClimbingVelocity(ref Vector3 currentVelocity, float deltaTime)
     {
         if (_climbPhase == ClimbPhase.Climbing)
         {

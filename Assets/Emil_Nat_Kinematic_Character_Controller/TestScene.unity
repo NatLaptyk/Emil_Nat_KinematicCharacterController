@@ -366,6 +366,11 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
+--- !u!95 &512524888 stripped
+Animator:
+  m_CorrespondingSourceObject: {fileID: 6342419161535713991, guid: 516e681ed61f1624cabeb149ebeddd39, type: 3}
+  m_PrefabInstance: {fileID: 1547013070}
+  m_PrefabAsset: {fileID: 0}
 --- !u!114 &527717021 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 5991464696250585232, guid: e67a6d8660905894cb7811488cffcdf6, type: 3}
@@ -530,7 +535,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 5869061569163668509, guid: 22e706a09ba45c74fabc648923de9e59, type: 3}
       propertyPath: m_LocalScale.x
-      value: 3
+      value: 3.9942002
       objectReference: {fileID: 0}
     - target: {fileID: 5869061569163668509, guid: 22e706a09ba45c74fabc648923de9e59, type: 3}
       propertyPath: m_LocalScale.y
@@ -538,11 +543,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5869061569163668509, guid: 22e706a09ba45c74fabc648923de9e59, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 6.0731893
+      value: 6.1752
       objectReference: {fileID: 0}
     - target: {fileID: 5869061569163668509, guid: 22e706a09ba45c74fabc648923de9e59, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.000000040706823
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5869061569163668509, guid: 22e706a09ba45c74fabc648923de9e59, type: 3}
       propertyPath: m_LocalPosition.z
@@ -1062,6 +1067,7 @@ MonoBehaviour:
   LadderLayers:
     serializedVersion: 2
     m_Bits: 8
+  animator: {fileID: 512524888}
 --- !u!4 &1600790427 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 2067988488256933446, guid: 516e681ed61f1624cabeb149ebeddd39, type: 3}
