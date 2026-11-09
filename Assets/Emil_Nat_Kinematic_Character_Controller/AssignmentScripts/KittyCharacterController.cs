@@ -59,6 +59,12 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     // Upward speed, in metres per second, given to the character the instant it jumps
     public float JumpStrength = 10f;
 
+    // Upward speed, in metres per second, given to the character by a jump started in the air
+    public float AirJumpStrength = 10f;
+
+    // How long, in seconds, a jump press stays valid while the character cannot jump yet
+    public float JumpBufferTime = 0.1f;
+
     // How quickly the character turns to face its movement direction; higher turns faster
     public float RotationRate = 5f;
 
@@ -76,8 +82,12 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     // Top speed, in metres per second, on the ground while the run button is held
     public float MaxRunSpeed = 9f;
 
-    //SDFBJHDSFKJSHDFLHSDLFKJHSLDKJFHLSKJDHFLJSHDFLKJHSDLFKJHSLDJFHLSKJDHFLKSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJSJFD
+    // Speed, in metres per second, that air steering pulls the horizontal 
+    // velocity toward while the run button is held
     public float MaxRunAirSpeed = 9f;
+
+    // How many jumps the character may start in the air before it has to touch stable ground again
+    public int MaxAirJumps = 1;
 
     // Speed along the ladder, in metres per second, at full stick
     public float ClimbSpeed = 3f;
@@ -98,6 +108,13 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     // Remaining coyote window in seconds: refilled while grounded, drains while airborne, spent by a jump
     private float _coyoteTimeCounter;
+
+    // Air jumps left before the next landing; 
+    // refilled on stable ground, spent one per air jump
+    private int _airJumpsRemaining;
+
+    // Seconds since the current jump request was made; compared against JumpBufferTime
+    private float _timeSinceJumpRequested;
 
     // Direction the player wants to move this update, already rotated to match the camera; length 0 to 1
     private Vector3 _moveInput;
@@ -128,6 +145,10 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     // Set by Update when the climb button goes down, cleared by the motor update that handles it
     private bool _climbRequested;
+
+    // Set by Update on the frame the jump button goes down; 
+    // cleared by the jump that uses it, or by the buffer expiring
+    private bool _jumpRequested;
 
     // Where the cat was when the current slide (anchoring or releasing) began
     private Vector3 _anchorStartPosition;
@@ -232,10 +253,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
         // The character turns towards the direction it moves in
         _lookInput = _moveInput;
-
-        // ReadValue on a button is 0 or 1, so this stays true for the whole time the button is held
-        _jumpPressed = (JumpAction.action.ReadValue<float>() > 0);
-
+        
         // Held, not pressed: run for as long as the button is down
         _runHeld = (RunAction.action.ReadValue<float>() > 0);
     }
@@ -313,14 +331,21 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     }
 
     /// <summary>
-    /// Latches button presses that must be handled exactly once. The flag stays true until a motor update consumes it,
-    /// so a press is never lost between frames and never handled twice.
+    /// Latches button presses that must be handled exactly once. A press is only visible during the frame it
+    /// happens in, and a motor update does not run every frame, so the flag carries it to the next update.
+    /// Each flag is cleared by the code that acts on it, never here.
     /// </summary>
     private void ReadPressedInputs()
     {
         if (ClimbAction.action.WasPressedThisFrame())
         {
             _climbRequested = true;
+        }
+
+        if (JumpAction.action.WasPressedThisFrame())
+        {
+            _jumpRequested = true;
+            _timeSinceJumpRequested = 0f;
         }
     }
 
@@ -501,20 +526,43 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     }
 
     /// <summary>
-    /// Last callback of every motor update, after the cat has been moved. Climbing's phase changes live here because
-    /// they need the position the motor actually reached this update.
+    /// Ages a pending jump request and drops it once it is older than JumpBufferTime, so a press made long
+    /// before landing does not fire on touchdown. Does nothing while no request is pending.
     /// </summary>
     /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
     public void AfterCharacterUpdate(float deltaTime)
     {
-        if (_movementMode == MovementMode.Climbing)
+        UpdateJumpBuffer(deltaTime);
+        UpdateAnimation();
+
+        if (_movementMode != MovementMode.Climbing)
         {
-            UpdateClimbing(deltaTime);
+            return;
         }
 
-        UpdateAnimation();
+        UpdateClimbing(deltaTime);        
     }
 
+    private void UpdateJumpBuffer(float deltaTime)
+    {
+        if (!_jumpRequested)
+        {
+            return;
+        }
+
+        _timeSinceJumpRequested += deltaTime;
+
+        if (_timeSinceJumpRequested > JumpBufferTime)
+        {
+            _jumpRequested = false;
+        }
+    }
+    /// <summary>
+    /// Feeds the Animator the state it needs to pick a clip, once per motor update.
+    /// isGrounded mirrors the motor's stable-ground result; isRun is true whenever there is movement input;
+    /// isJumping is refreshed only while airborne (rising = true, falling = false) and keeps its last value
+    /// on the ground, so the Animator can finish a landing transition before the next jump starts.
+    /// </summary>
     private void UpdateAnimation()
     {
         Vector3 characterVelocity = _kinematicMotor.Velocity;
@@ -599,10 +647,12 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     /// <summary>
     /// Movement rules while airborne, whether jumping or falling.
-    /// Air control only touches the horizontal part of the velocity: the difference between the target and
-    /// the current velocity is projected onto the plane perpendicular to gravity before it is applied, so
-    /// steering in the air can never cancel gravity or add lift. Gravity is then added every update, which is
-    /// what makes the character fall faster and faster.
+    /// While the stick is pushed, air steering pulls the velocity toward the input direction at MaxAirSpeed,
+    /// or MaxRunAirSpeed while the run button is held, so a running jump keeps its momentum. Without input the
+    /// velocity is left alone: there is no air friction. The correction only touches the horizontal part of the
+    /// velocity: the difference between the target and the current velocity is projected onto the plane
+    /// perpendicular to gravity before it is applied, so steering can never cancel gravity or add lift.
+    /// Gravity is then added every update, which is what makes the character fall faster and faster.
     /// </summary>
     /// <param name="currentVelocity">The character's velocity to modify.</param>
     /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
@@ -610,6 +660,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     {
         if (_moveInput.sqrMagnitude > 0)
         {
+            // Running carries into the air: aim for the run target while the button is held
             float maxSpeed = _runHeld ? MaxRunAirSpeed : MaxAirSpeed;
 
             Vector3 targetVelocity = _moveInput * maxSpeed;
@@ -629,46 +680,61 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     #region Jumping
 
     /// <summary>
-    /// Launches the character upward when the jump button is held and a jump is allowed.
-    /// A jump is allowed while standing on stable ground, or for a short moment after leaving it (coyote time),
-    /// so a player who presses jump a few frames after walking off a ledge still gets the jump.
-    /// ForceUnground tells the motor to stop snapping the capsule to the floor for a moment; without it the
-    /// motor would pull the character straight back down on the next update and the jump would fail.
-    /// The vertical velocity is replaced rather than added to: a coyote jump starts while already falling,
-    /// and adding the jump to a downward velocity would give a visibly weaker jump.
-    /// Finally the coyote counter is emptied so the held button cannot trigger a second jump on the next update.
+    /// The jump itself, shared by ground and air jumps. ForceUnground stops the motor snapping the character
+    /// back onto the floor on the next update. The vertical part of the velocity is replaced rather than added
+    /// to, so a jump started while falling is as strong as one from the ground. Consumes the jump request.
+    /// </summary>
+    /// <param name="currentVelocity">The character's velocity to modify.</param>
+    /// <param name="strength">Upward speed in metres per second after the jump.</param>
+    private void PerformJump(ref Vector3 currentVelocity, float strength)
+    {
+        _kinematicMotor.ForceUnground();
+        Vector3 verticalVelocity = Vector3.Project(currentVelocity, _kinematicMotor.CharacterUp);
+        currentVelocity -= verticalVelocity;
+        currentVelocity += _kinematicMotor.CharacterUp * strength;
+
+        _jumpRequested = false;
+
+    }
+
+    /// <summary>
+    /// Decides whether a pending jump press can be used this update, and which kind of jump it is.
+    /// A ground jump is allowed on stable ground or inside the coyote window and spends that window.
+    /// Otherwise an air jump is allowed while air jumps remain, and spends one.
+    /// If neither applies the request is left set, which is what lets a press made just before landing
+    /// fire on touchdown (jump buffering); UpdateJumpBuffer expires it if the landing takes too long.
     /// </summary>
     /// <param name="currentVelocity">The character's velocity to modify.</param>
     private void ApplyJumping(ref Vector3 currentVelocity)
     {
-        if (!_jumpPressed)
+        if (!_jumpRequested)
         {
             return;
         }
 
-        bool canJump = _kinematicMotor.GroundingStatus.IsStableOnGround || _coyoteTimeCounter > 0f;
+        bool canGroundJump = _kinematicMotor.GroundingStatus.IsStableOnGround || _coyoteTimeCounter > 0f;
 
-        if (!canJump)
+        if (canGroundJump)
         {
+            PerformJump(ref currentVelocity, JumpStrength);
+            _coyoteTimeCounter = 0f;
             return;
         }
 
-        // Skips ground probing for the next 0.1 s, otherwise the motor snaps the character straight back onto the floor
-        _kinematicMotor.ForceUnground();
+        if (_airJumpsRemaining > 0)
+        {
+            PerformJump(ref currentVelocity, AirJumpStrength);
+            _airJumpsRemaining--;
+            return;
+        }
 
-        // Replace the vertical velocity rather than add to it, so a coyote jump that starts mid-fall is as high as a grounded one
-        Vector3 verticalVelocity = Vector3.Project(currentVelocity, _kinematicMotor.CharacterUp);
-        currentVelocity -= verticalVelocity;
-        currentVelocity += _kinematicMotor.CharacterUp * JumpStrength;
-
-        // The window is spent: no second jump off the same ledge
-        _coyoteTimeCounter = 0f;
     }
 
     /// <summary>
     /// Called by the motor after it has probed the ground for this update, before UpdateRotation and UpdateVelocity.
     /// This is the earliest point in an update where GroundingStatus is up to date, which makes it the right place
-    /// to bring the coyote counter up to date before the jump check reads it.
+    /// to refresh everything that depends on being grounded before the jump check reads it.
+    /// Not called while climbing, because ground solving is switched off.
     /// </summary>
     /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
     public void PostGroundingUpdate(float deltaTime)
@@ -677,10 +743,8 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     }
 
     /// <summary>
-    /// Keeps the coyote window full while the character stands on stable ground and drains it once it leaves.
-    /// While grounded the counter is simply reset to CoyoteTime every update. The first update without stable
-    /// ground stops resetting it, so it counts down from CoyoteTime towards zero, and ApplyJumping accepts a
-    /// jump for as long as it is still above zero.
+    /// Refreshes what touching stable ground gives back: the coyote window is refilled and the air jumps are
+    /// restored. While airborne the coyote window drains instead; air jumps only come back on landing.
     /// </summary>
     /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
     private void UpdateCoyoteTime(float deltaTime)
@@ -688,10 +752,11 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
         if (_kinematicMotor.GroundingStatus.IsStableOnGround)
         {
             _coyoteTimeCounter = CoyoteTime;
+            _airJumpsRemaining = MaxAirJumps;
             return;
         }
 
-        _coyoteTimeCounter -= deltaTime;
+        _coyoteTimeCounter -= deltaTime;        
     }
 
     #endregion
