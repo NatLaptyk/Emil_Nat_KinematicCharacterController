@@ -38,7 +38,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     // Input System action that gives the move direction as a Vector2: x is left/right, y is forward/back
     public InputActionReference MoveAction;
 
-    // Input System action for the jump button; reads as 0 while released and above 0 while held
+    // Input System action for the jump button; read as a press, latched in Update
     public InputActionReference JumpAction;
 
     // Camera the player looks through; movement input is interpreted relative to where it faces
@@ -70,6 +70,13 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     // How quickly the character turns to face its movement direction; higher turns faster
     public float RotationRate = 5f;
+
+    // Sideways speed, in metres per second, of a leap from a ladder
+    public float LeapSideSpeed = 6f;
+
+    // Upward speed, in metres per second, of a leap from a ladder;
+    // with gravity it sets how long the leap stays in the air
+    public float LeapUpSpeed = 4f;
 
     // Acceleration applied while airborne, in metres per second squared; points down so the character falls
     public Vector3 Gravity = new Vector3(0, -10, 0);
@@ -103,6 +110,8 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     // Calling the animator
     [Header("Animation")]
+
+    // Animator on the cat model that plays the movement clips
     [SerializeField] private Animator _animator;
 
     #endregion
@@ -125,9 +134,6 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     // Direction the character should turn towards this update; currently the same as _moveInput
     private Vector3 _lookInput;
 
-    // True for as long as the jump button is held down
-    private bool _jumpPressed;
-
     // The KCC motor on this GameObject; it owns the capsule, the collisions and the ground detection
     private KinematicCharacterMotor _kinematicMotor;
 
@@ -140,8 +146,19 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     // The ladder being climbed; null while not climbing
     private KittyLadder _activeLadder;
 
-    // Raw forward/back stick value, before any camera rotation; moves the cat up and down the ladder
+    // Raw forward/back stick value, before any camera rotation;
+    // moves the cat up and down the ladder
     private float _climbInput;
+
+    // Raw left/right stick value, before any camera rotation;
+    // picks the direction of a leap from a ladder
+    private float _climbSideInput;
+
+    // True from the moment the cat leaps off a ladder until it catches another one or lands
+    private bool _isLeaping;
+
+    // The ladder the cat just leapt from, ignored by the catch so it does not grab the same one again
+    private KittyLadder _lastLadder;
 
     // True while the run button is held
     private bool _runHeld;
@@ -220,14 +237,15 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     /// <summary>
     /// First callback of every motor update, before the motor probes the ground or moves anything.
-    /// This is the right moment to read the controls, so every later callback in the same update
-    /// works from the same snapshot of the input.
+    /// Reads the held inputs, then handles a pending climb press, then tries to catch a ladder if the cat
+    /// is in the middle of a leap, so every later callback in the same update works from the same state.
     /// </summary>
     /// <param name="deltaTime">Duration of the current motor update in seconds (the fixed timestep, 0.02 by default).</param>
     public void BeforeCharacterUpdate(float deltaTime)
     {
         UpdateInputs();
         HandleClimbRequest();
+        TryCatchLadder();
     }
 
     /// <summary>
@@ -245,6 +263,10 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
         // Raw forward/back for the ladder, before the camera rotation: push forward to climb up
         _climbInput = moveActionInput.y;
 
+        //Raw left/right for leaping off a ladder,
+        //before the camera rotation: left means left along the wall
+        _climbSideInput = moveActionInput.x;
+
         // Lay it flat on the XZ ground plane; a keyboard gives whole numbers, a stick gives fractions
         _moveInput = new Vector3(moveActionInput.x, 0, moveActionInput.y);
 
@@ -256,7 +278,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
         // The character turns towards the direction it moves in
         _lookInput = _moveInput;
-        
+
         // Held, not pressed: run for as long as the button is down
         _runHeld = (RunAction.action.ReadValue<float>() > 0);
     }
@@ -280,7 +302,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
             return;
         }
 
-        KittyLadder ladder = FindLadderInReach();
+        KittyLadder ladder = FindLadderInReach(null);
 
         if (ladder == null)
         {
@@ -292,10 +314,11 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     /// <summary>
     /// Asks the motor which colliders on the ladder layers overlap the capsule right now, triggers included,
-    /// and returns the first one that belongs to a ladder.
+    /// and returns the first one that belongs to a ladder, skipping the one it is told to ignore.
     /// </summary>
+    /// <param name="ignoredLadder">A ladder to leave out of the search, such as the one just leapt from; null to consider all of them.</param>
     /// <returns>The ladder in reach, or null if there is none.</returns>
-    private KittyLadder FindLadderInReach()
+    private KittyLadder FindLadderInReach(KittyLadder ignoredLadder)
     {
         int overlapCount = _kinematicMotor.CharacterOverlap(_kinematicMotor.TransientPosition, _kinematicMotor.TransientRotation, _overlapResults, LadderLayers, QueryTriggerInteraction.Collide);
 
@@ -303,11 +326,38 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
         {
             if (_overlapResults[i].TryGetComponent(out KittyLadder ladder))
             {
+                if (ladder == ignoredLadder)
+                {
+                    continue;
+                }
+
                 return ladder;
             }
+
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Runs every update while the cat is leaping between ladders: grabs the first ladder in reach other than
+    /// the one it just left. Does nothing when the cat is not leaping or no other ladder is touching the capsule.
+    /// </summary>
+    private void TryCatchLadder()
+    {
+        if (!_isLeaping)
+        {
+            return;
+        }
+
+        KittyLadder ladder = FindLadderInReach(_lastLadder);
+
+        if (ladder == null)
+        {
+            return;
+        }
+
+        GrabLadder(ladder);
     }
 
     /// <summary>
@@ -359,9 +409,9 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     /// <summary>
     /// Called by the motor every update to ask which way the character should face.
     /// currentRotation is passed by reference: whatever is left in it when this method returns is the
-    /// rotation the motor applies. Nothing is changed without input, so the character keeps facing its
-    /// last direction when the player lets go of the stick. Slerp with a small factor moves the facing
-    /// a fraction of the way towards the target every update, which gives a smooth turn instead of a snap.
+    /// rotation the motor applies. On a ladder the climbing rules decide. During a leap between ladders the
+    /// rotation is left alone, so the cat keeps facing the wall. Otherwise the cat turns toward the input with
+    /// Slerp, a fraction of the way each update, and keeps its last facing when there is no input.
     /// </summary>
     /// <param name="currentRotation">The character's rotation; modify it to turn the character.</param>
     /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
@@ -370,6 +420,11 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
         if (_movementMode == MovementMode.Climbing)
         {
             ClimbingRotation(ref currentRotation);
+            return;
+        }
+        // Mid-leap between ladders: keep facing the wall
+        if (_isLeaping)
+        {
             return;
         }
 
@@ -407,13 +462,17 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     #region Climbing
 
     /// <summary>
-    /// Switches to climbing. Collision and ground solving are turned off so the motor moves the cat exactly where the
-    /// climbing code asks, with no walls or floor interfering, and the cat starts sliding onto the closest point of
-    /// the ladder line while turning to face the ladder.
+    /// Switches to climbing. Any grab ends a leap, so the leap state is cleared first. Collision and ground
+    /// solving are turned off so the motor moves the cat exactly where the climbing code asks, with no walls or
+    /// floor interfering, and the cat starts sliding onto the closest point of the ladder line while turning
+    /// to face the ladder.
     /// </summary>
     /// <param name="ladder">The ladder to climb.</param>
     private void GrabLadder(KittyLadder ladder)
     {
+        // Any grab ends a leap, whether the cat caught the ladder or the player pressed the climb button
+        _isLeaping = false;
+        _lastLadder = null;
         _activeLadder = ladder;
         _rotationBeforeClimb = _kinematicMotor.TransientRotation;
         _movementMode = MovementMode.Climbing;
@@ -429,6 +488,25 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
         Quaternion facingLadder = Quaternion.LookRotation(_activeLadder.transform.forward, _kinematicMotor.CharacterUp);
 
         StartSlide(ClimbPhase.Anchoring, pointOnLadder, facingLadder);
+    }
+
+    /// <summary>
+    /// Throws the cat sideways off the ladder it is climbing. The ladder is remembered before climbing is exited,
+    /// because exiting clears it. The velocity is assigned outright, since there is no momentum to keep from a
+    /// ladder: sideways along the wall in the direction of the stick, plus a little upward speed for airtime.
+    /// Marks the cat as leaping, which locks its facing and lets it catch the next ladder. Consumes the jump request.
+    /// </summary>
+    /// <param name="currentVelocity">The character's velocity to modify.</param>
+    private void LeapFromLadder(ref Vector3 currentVelocity)
+    {
+        Vector3 wallRight = Vector3.Cross(_kinematicMotor.CharacterUp, _kinematicMotor.CharacterForward);
+        Vector3 leapDirection = wallRight * Mathf.Sign(_climbSideInput);
+        _lastLadder = _activeLadder;
+        ExitClimbing();
+        _kinematicMotor.ForceUnground();
+        currentVelocity = leapDirection * LeapSideSpeed + _kinematicMotor.CharacterUp * LeapUpSpeed;
+        _isLeaping = true;
+        _jumpRequested = false;
     }
 
     /// <summary>
@@ -529,8 +607,9 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     }
 
     /// <summary>
-    /// Ages a pending jump request and drops it once it is older than JumpBufferTime, so a press made long
-    /// before landing does not fire on touchdown. Does nothing while no request is pending.
+    /// Last callback of every motor update, after the character has been moved. Runs the jump buffer timer
+    /// and the animation update in every mode, then the climbing phase changes while on a ladder, because
+    /// those need the position the motor actually reached this update.
     /// </summary>
     /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
     public void AfterCharacterUpdate(float deltaTime)
@@ -543,9 +622,14 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
             return;
         }
 
-        UpdateClimbing(deltaTime);        
+        UpdateClimbing(deltaTime);
     }
 
+    /// <summary>
+    /// Ages a pending jump request and drops it once it is older than JumpBufferTime, so a press made long
+    /// before landing does not fire on touchdown. Does nothing while no request is pending.
+    /// </summary>
+    /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
     private void UpdateJumpBuffer(float deltaTime)
     {
         if (!_jumpRequested)
@@ -613,8 +697,12 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
         ApplyJumping(ref currentVelocity);
     }
+
     /// <summary>
-    /// Updates the character's velocity while climbing.
+    /// Velocity while on a ladder. Climbing: a jump press with the stick held sideways starts a leap to the
+    /// next ladder; otherwise the cat moves along the ladder line at ClimbSpeed scaled by the stick.
+    /// Sliding (anchoring or releasing): work out where the cat should be this update on its way to the target
+    /// and ask the motor for the velocity that gets it exactly there. No gravity in any of these cases.
     /// </summary>
     /// <param name="currentVelocity">The character's velocity to modify.</param>
     /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
@@ -622,6 +710,13 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     {
         if (_climbPhase == ClimbPhase.Climbing)
         {
+            // Jump with the stick held sideways: leave this ladder and leap toward the next one
+            if (_jumpRequested && Mathf.Abs(_climbSideInput) > 0.1f)
+            {
+                LeapFromLadder(ref currentVelocity);
+                return;
+            }
+
             currentVelocity = _activeLadder.ClimbDirection * _climbInput * ClimbSpeed;
             return;
         }
@@ -652,8 +747,10 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     /// Movement rules while airborne, whether jumping or falling.
     /// While the stick is pushed, air steering pulls the velocity toward the input direction at MaxAirSpeed,
     /// or MaxRunAirSpeed while the run button is held, so a running jump keeps its momentum. Without input the
-    /// velocity is left alone: there is no air friction. The correction only touches the horizontal part of the
-    /// velocity: the difference between the target and the current velocity is projected onto the plane
+    /// velocity is left alone: there is no air friction. 
+    /// Steering is also switched off during a leap between ladders, so the leap follows a predictable arc.
+    /// The correction only touches the horizontal part of the velocity:
+    /// the difference between the target and the current velocity is projected onto the plane
     /// perpendicular to gravity before it is applied, so steering can never cancel gravity or add lift.
     /// Gravity is then added every update, which is what makes the character fall faster and faster.
     /// </summary>
@@ -661,7 +758,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
     private void AirMovement(ref Vector3 currentVelocity, float deltaTime)
     {
-        if (_moveInput.sqrMagnitude > 0)
+        if (_moveInput.sqrMagnitude > 0 && !_isLeaping)
         {
             // Running carries into the air: aim for the run target while the button is held
             float maxSpeed = _runHeld ? MaxRunAirSpeed : MaxAirSpeed;
@@ -700,6 +797,12 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     }
 
+    /// <summary>
+    /// The horizontal half of an air jump. Replaces the horizontal part of the velocity with the stick direction
+    /// at AirJumpSideSpeed and leaves the vertical part untouched, so the cat can change direction in mid-air.
+    /// Does nothing without input: the air jump then goes straight up and keeps its horizontal speed.
+    /// </summary>
+    /// <param name="currentVelocity">The character's velocity to modify.</param>
     private void RedirectHorizontalVelocity(ref Vector3 currentVelocity)
     {
         if (_moveInput.sqrMagnitude == 0)
@@ -707,8 +810,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
             return;
         }
         Vector3 verticalVelocity = Vector3.Project(currentVelocity, _kinematicMotor.CharacterUp);
-        Vector3 horizontalVelocity = currentVelocity - verticalVelocity;
-        currentVelocity = verticalVelocity + _moveInput * AirJumpSideSpeed; 
+        currentVelocity = verticalVelocity + _moveInput * AirJumpSideSpeed;
     }
 
     /// <summary>
@@ -742,7 +844,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
             _airJumpsRemaining--;
             return;
         }
-
+        // No jump available: the request stays set so it can fire on landing, until UpdateJumpBuffer expires it
     }
 
     /// <summary>
@@ -758,8 +860,9 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     }
 
     /// <summary>
-    /// Refreshes what touching stable ground gives back: the coyote window is refilled and the air jumps are
-    /// restored. While airborne the coyote window drains instead; air jumps only come back on landing.
+    /// Refreshes what touching stable ground gives back: the coyote window is refilled, the air jumps are
+    /// restored, and a leap that missed its ladder is ended so the cat can turn and steer again.
+    /// While airborne the coyote window drains instead; the rest only comes back on landing.
     /// </summary>
     /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
     private void UpdateCoyoteTime(float deltaTime)
@@ -768,10 +871,12 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
         {
             _coyoteTimeCounter = CoyoteTime;
             _airJumpsRemaining = MaxAirJumps;
+            _isLeaping = false;
+            _lastLadder = null;
             return;
         }
 
-        _coyoteTimeCounter -= deltaTime;        
+        _coyoteTimeCounter -= deltaTime;
     }
 
     #endregion
