@@ -62,6 +62,9 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     // Upward speed, in metres per second, given to the character by a jump started in the air
     public float AirJumpStrength = 10f;
 
+    // Horizontal speed, in metres per second, given to an air jump in the direction the movement is pushed.
+    public float AirJumpSideSpeed = 6f;
+
     // How long, in seconds, a jump press stays valid while the character cannot jump yet
     public float JumpBufferTime = 0.1f;
 
@@ -697,6 +700,17 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     }
 
+    private void RedirectHorizontalVelocity(ref Vector3 currentVelocity)
+    {
+        if (_moveInput.sqrMagnitude == 0)
+        {
+            return;
+        }
+        Vector3 verticalVelocity = Vector3.Project(currentVelocity, _kinematicMotor.CharacterUp);
+        Vector3 horizontalVelocity = currentVelocity - verticalVelocity;
+        currentVelocity = verticalVelocity + _moveInput * AirJumpSideSpeed; 
+    }
+
     /// <summary>
     /// Decides whether a pending jump press can be used this update, and which kind of jump it is.
     /// A ground jump is allowed on stable ground or inside the coyote window and spends that window.
@@ -723,6 +737,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
         if (_airJumpsRemaining > 0)
         {
+            RedirectHorizontalVelocity(ref currentVelocity);
             PerformJump(ref currentVelocity, AirJumpStrength);
             _airJumpsRemaining--;
             return;
