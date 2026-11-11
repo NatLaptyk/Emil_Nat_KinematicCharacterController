@@ -110,7 +110,6 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     // Calling the animator
     [Header("Animation")]
-
     // Animator on the cat model that plays the movement clips
     [SerializeField] private Animator _animator;
 
@@ -227,8 +226,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
             return;
         }
 
-        _kinematicMotor.CharacterController = this;
-        //_animator = GetComponent<Animator>();
+        _kinematicMotor.CharacterController = this;        
     }
 
     #endregion
@@ -402,6 +400,18 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
         }
     }
 
+    /// <summary>
+    /// Called by the motor each time the ground probe finds ground under the character, which is every update
+    /// while standing. On stable ground it sets the isLanding trigger, which the Animator uses to leave the jump clip.
+    /// </summary>
+    public void OnGroundHit(Collider hitCollider, Vector3 hitNormal, Vector3 hitPoint, ref HitStabilityReport hitStabilityReport)
+    {
+        if (hitStabilityReport.IsStable)
+        {
+            _animator.SetTrigger("isLanding");
+        }
+    }
+
     #endregion
 
     #region Rotation
@@ -412,6 +422,7 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     /// rotation the motor applies. On a ladder the climbing rules decide. During a leap between ladders the
     /// rotation is left alone, so the cat keeps facing the wall. Otherwise the cat turns toward the input with
     /// Slerp, a fraction of the way each update, and keeps its last facing when there is no input.
+    /// The rotation is straightened first on every update, so the cat can never stay tilted.
     /// </summary>
     /// <param name="currentRotation">The character's rotation; modify it to turn the character.</param>
     /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
@@ -422,6 +433,8 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
             ClimbingRotation(ref currentRotation);
             return;
         }
+
+        StraightenRotation(ref currentRotation);
         // Mid-leap between ladders: keep facing the wall
         if (_isLeaping)
         {
@@ -433,10 +446,14 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
             return;
         }
 
-        // Blend a fraction of the way from the current facing towards the input direction
-        Vector3 targetLookDirection = Vector3.Slerp(_kinematicMotor.CharacterForward, _lookInput, deltaTime * RotationRate);
+        // Work from the straightened rotation and the real up; the motor's own values are from before this update
+        Vector3 worldUp = -Gravity.normalized;
+        Vector3 currentForward = currentRotation * Vector3.forward;
 
-        currentRotation = Quaternion.LookRotation(targetLookDirection, _kinematicMotor.CharacterUp);
+        // Blend a fraction of the way from the current facing towards the input direction
+        Vector3 targetLookDirection = Vector3.Slerp(currentForward, _lookInput, deltaTime * RotationRate);
+
+        currentRotation = Quaternion.LookRotation(targetLookDirection, worldUp);
     }
 
     /// <summary>
@@ -455,6 +472,19 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
         float slideProgress = Mathf.Clamp01(_anchorTimer / AnchorDuration);
 
         currentRotation = Quaternion.Slerp(_anchorStartRotation, _anchorTargetRotation, slideProgress);
+    }
+
+    /// <summary>
+    /// Removes any lean from the rotation so the cat's up always matches the opposite of gravity, while keeping
+    /// its heading. Without this, a tilt picked up from a ladder or an exit point would stay forever, because
+    /// every later rotation would be built on top of it.
+    /// </summary>
+    /// <param name="currentRotation">The character's rotation; modified in place.</param>
+    private void StraightenRotation(ref Quaternion currentRotation)
+    {
+        Vector3 currentUp = currentRotation * Vector3.up;
+        Vector3 worldUp = -Gravity.normalized;
+        currentRotation = Quaternion.FromToRotation(currentUp, worldUp) * currentRotation;
     }
 
     #endregion
@@ -485,7 +515,11 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
         // The discard (out _) means we only want the point here, not the overshoot
         Vector3 pointOnLadder = _activeLadder.ClosestPointOnLadder(_kinematicMotor.TransientPosition, out _);
-        Quaternion facingLadder = Quaternion.LookRotation(_activeLadder.transform.forward, _kinematicMotor.CharacterUp);
+
+        // Ignore any tilt in the ladder object so the cat stays upright while facing it
+        Vector3 worldUp = -Gravity.normalized;
+        Vector3 flatLadderForward = Vector3.ProjectOnPlane(_activeLadder.transform.forward, worldUp).normalized;
+        Quaternion facingLadder = Quaternion.LookRotation(flatLadderForward, worldUp);
 
         StartSlide(ClimbPhase.Anchoring, pointOnLadder, facingLadder);
     }
@@ -644,11 +678,15 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
             _jumpRequested = false;
         }
     }
+
     /// <summary>
     /// Feeds the Animator the state it needs to pick a clip, once per motor update.
-    /// isGrounded mirrors the motor's stable-ground result; isRun is true whenever there is movement input;
-    /// isJumping is refreshed only while airborne (rising = true, falling = false) and keeps its last value
-    /// on the ground, so the Animator can finish a landing transition before the next jump starts.
+    /// isGrounded mirrors the motor's stable-ground result; isRun is true whenever there is movement input.
+    /// isJumping is refreshed only while airborne and not on a ladder (rising = true, falling = false) and keeps
+    /// its last value otherwise, so the Animator can finish a landing transition before the next jump starts.
+    /// isClimbing is true for the whole time on a ladder. climbSpeed is the forward/back stick value while
+    /// actually climbing and 0 during the slides; the climb clip uses it as its speed multiplier, so it plays
+    /// forward going up, backward going down, and freezes when the cat holds still.
     /// </summary>
     private void UpdateAnimation()
     {
@@ -656,13 +694,21 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
         Vector3 inputVelocity = _moveInput;
 
         _animator.SetBool("isGrounded", _kinematicMotor.GroundingStatus.IsStableOnGround);
-
         _animator.SetBool("isRun", _moveInput.sqrMagnitude > 0);
-
-        if (!_kinematicMotor.GroundingStatus.IsStableOnGround)
+        bool isClimbing = _movementMode == MovementMode.Climbing;
+        
+        // On a ladder the cat is off the ground and moving up, which is not a jump
+        if (!_kinematicMotor.GroundingStatus.IsStableOnGround && !isClimbing)
         {
+            // isJumping is a Trigger in the Animator: SetBool(true) sets it while rising, SetBool(false) clears it while falling
             _animator.SetBool("isJumping", _kinematicMotor.Velocity.y > 0);
         }
+
+        _animator.SetBool("isClimbing", isClimbing);
+
+        // Paws only move while actually climbing, not during the slide on or off the ladder
+        float climbSpeed = (isClimbing && _climbPhase == ClimbPhase.Climbing) ? _climbInput : 0f;
+        _animator.SetFloat("climbSpeed", climbSpeed);
     }
 
     #endregion
@@ -672,12 +718,11 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     /// <summary>
     /// Called by the motor every update to ask how fast, and in which direction, the character should move.
     /// Like UpdateRotation, currentVelocity is passed by reference and the motor uses whatever is left in it.
-    /// The motor has already checked the ground for this update, so GroundingStatus tells us whether to use
-    /// the ground rules (no gravity, full speed) or the air rules (gravity, limited steering).
+    /// On a ladder the climbing rules decide and nothing else here runs. Otherwise GroundingStatus, which the
+    /// motor has already refreshed for this update, picks the ground rules (no gravity, full speed) or the air
+    /// rules (gravity, limited steering).
     /// Jumping runs last so it can overwrite the vertical velocity the other two produced.
     /// </summary>
-    /// <param name="currentVelocity">The character's velocity in metres per second; modify it to move the character.</param>
-    /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
     public void UpdateVelocity(ref Vector3 currentVelocity, float deltaTime)
     {
         if (_movementMode == MovementMode.Climbing)
@@ -729,15 +774,15 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
 
     /// <summary>
     /// Movement rules while standing on stable ground.
-    /// The target velocity is the input direction scaled to the ground top speed. Lerp then moves the current
-    /// velocity a fraction of the way towards that target every update, so the character speeds up when the
-    /// player pushes and slows down when the player lets go, instead of changing speed instantly.
+    /// The target velocity is the input direction scaled to MaxGroundSpeed, or to MaxRunSpeed while the run
+    /// button is held. Lerp then moves the current velocity a fraction of the way towards that target every
+    /// update, so the character speeds up when the player pushes and slows down when the player lets go,
+    /// instead of changing speed instantly.
     /// No gravity is applied here: the motor keeps the character snapped to stable ground by itself.
     /// </summary>
-    /// <param name="currentVelocity">The character's velocity to modify.</param>
-    /// <param name="deltaTime">Duration of the current motor update in seconds.</param>
     private void GroundMovement(ref Vector3 currentVelocity, float deltaTime)
     {
+        // Walk or run top speed, depending on whether the run button is held
         float maxSpeed = _runHeld ? MaxRunSpeed : MaxGroundSpeed;
         Vector3 targetVelocity = _moveInput * maxSpeed;
         currentVelocity = Vector3.Lerp(currentVelocity, targetVelocity, deltaTime * GroundAcceleration);
@@ -904,21 +949,6 @@ public class KittyCharacterController : MonoBehaviour, ICharacterController
     /// <param name="hitCollider">The collider that overlaps the character.</param>
     public void OnDiscreteCollisionDetected(Collider hitCollider)
     {
-    }
-
-    /// <summary>
-    /// Called when the ground probe finds ground under the character. Unused here.
-    /// </summary>
-    /// <param name="hitCollider">The collider found under the character.</param>
-    /// <param name="hitNormal">Direction the ground surface faces at the hit point.</param>
-    /// <param name="hitPoint">World position where the ground was hit.</param>
-    /// <param name="hitStabilityReport">The motor's verdict on whether the character can stand there.</param>
-    public void OnGroundHit(Collider hitCollider, Vector3 hitNormal, Vector3 hitPoint, ref HitStabilityReport hitStabilityReport)
-    {
-        if (hitStabilityReport.IsStable)
-        {
-            _animator.SetTrigger("isLanding");
-        }
     }
 
     /// <summary>
